@@ -3,172 +3,136 @@ import { board, JAIL_POSITION }                            from '../../engine/bo
 import { rollDice }                                        from '../../engine/dice.js';
 import { advanceTurn }                                     from '../../engine/turnManager.js';
 import { spinSlot }                                        from '../../systems/slotSystem.js';
-import { drawEvent }                                       from '../../systems/eventSystem.js';
+import { runEventFlow }                                    from './eventHandler.js';
 import { getPropertyButtons }                              from '../components/propertyButtons.js';
 import { TILE_TYPES }                                      from '../../types/Tile.js';
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDelta(delta) {
   if (delta > 0) return `+${delta}`;
   if (delta < 0) return `${delta}`;
-  return "±0";
+  return '±0';
 }
 
-/**
- * Edit the stored turn message in place.
- * Falls back to interaction.update if turnMessage isn't available.
- */
-async function editTurnMessage(interaction, game, data) {
-  try {
-    if (game.turnMessage) {
-      return await game.turnMessage.edit(data);
-    }
-    return await interaction.update(data);
-  } catch {
-    return await interaction.update(data);
-  }
-}
+const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// ─── slot animation ───────────────────────────────────────────────────────────
-
-const SPIN_REELS = ["🍒", "🍋", "🍊", "🍇", "⭐", "💎", "7️⃣", "🔔"];
+const SPIN_REELS = ['🍒','🍋','🍊','🍇','⭐','💎','7️⃣','🔔'];
 const rand       = () => SPIN_REELS[Math.floor(Math.random() * SPIN_REELS.length)];
-const delay      = ms => new Promise(r => setTimeout(r, ms));
 
-async function animateSlot(game, interaction, result, header) {
-  const frames = 4;
-
-  // First acknowledge the button (removes the spinner on Discord's end)
-  await interaction.deferUpdate();
-
-  for (let i = 0; i < frames; i++) {
+async function animateSlot(game, result, header) {
+  for (let i = 0; i < 4; i++) {
     await delay(550);
-    const isLast = i === frames - 1;
+    const isLast  = i === 3;
     const reelStr = isLast
       ? `**[ ${result.reels[0]} | ${result.reels[1]} | ${result.reels[2]} ]**`
       : `[ ${rand()} | ${rand()} | ${rand()} ]`;
-
     await game.turnMessage.edit({
       content:
-        `${header}\n` +
-        `🎰 ${isLast ? '' : 'Spinning... '}${reelStr}\n` +
-        (isLast ? `${result.msg}\n💼 ${fmtDelta(result.delta)} rep  •  Balance: ${result.balance}` : ''),
+        `${header}\n🎰 ${isLast ? '' : 'Spinning... '}${reelStr}` +
+        (isLast ? `\n${result.msg}\n💼 ${fmtDelta(result.delta)} rep  •  Balance: ${result.balance}` : ''),
       components: [],
     });
   }
 }
-
-// ─── main handler ─────────────────────────────────────────────────────────────
 
 export async function handleRoll(interaction) {
   const game   = getGame(interaction.guildId);
   const player = game?.players[game.currentTurn];
 
   if (!game?.started) {
-    return interaction.reply({ content: "❌ No active game.", ephemeral: true });
+    return interaction.reply({ content: '❌ No active game.', ephemeral: true });
   }
   if (interaction.user.id !== player.id) {
-    return interaction.reply({ content: "⏳ It's not your turn!", ephemeral: true });
+    return interaction.reply({ content: '⏳ It\'s not your turn!', ephemeral: true });
   }
 
-  // ── roll dice & move ──
+  // Acknowledge the button click silently so Discord doesn't show a failure state.
+  // We do NOT deferUpdate because we're editing game.turnMessage directly — 
+  // deferUpdate would expect us to later call interaction.editReply() which we never do.
+  await interaction.reply({ content: '🎲 Rolling…', ephemeral: true });
+
+  // ── roll & move ──
   const { d1, d2, total } = rollDice();
   const passedGO          = movePlayer(player, total, board.length);
   const tile              = board[player.position];
 
   const rollLine =
     `🎲 <@${player.id}> rolled **${d1} + ${d2} = ${total}**` +
-    (passedGO ? "  ✨ *Passed GO! +200 rep*" : "");
-
+    (passedGO ? '  ✨ *Passed GO! +200 rep*' : '');
   const header = `${rollLine}\n📍 Landed on: **${tile.name}**`;
 
   // ── tile dispatch ──────────────────────────────────────────────────────────
 
-  // START
   if (tile.type === TILE_TYPES.START) {
-    await editTurnMessage(interaction, game, {
+    await game.turnMessage.edit({
       content:    `${header}\n✨ Landed on GO! +200 rep  •  Balance: ${player.reputation}`,
       components: [],
     });
     return advanceTurn(interaction, game);
   }
 
-  // JAIL (visiting)
   if (tile.type === TILE_TYPES.JAIL) {
-    await editTurnMessage(interaction, game, {
-      content:    `${header}\n🔒 Just visiting Jail. Nothing happens.`,
+    await game.turnMessage.edit({
+      content:    `${header}\n🔒 Just visiting Jail. Safe for now.`,
       components: [],
     });
     return advanceTurn(interaction, game);
   }
 
-  // GO TO JAIL
   if (tile.type === TILE_TYPES.GO_TO_JAIL) {
     teleportToJail(player, JAIL_POSITION);
-    await editTurnMessage(interaction, game, {
-      content:    `${header}\n🚔 Sent to Jail!`,
+    await game.turnMessage.edit({
+      content:    `${header}\n🚔 Busted! Sent directly to Jail.`,
       components: [],
     });
     return advanceTurn(interaction, game);
   }
 
-  // SLOT MACHINE
-  if (tile.type === TILE_TYPES.SLOT) {
-    const result    = spinSlot(player);
-    result.balance  = player.reputation;
-    await animateSlot(game, interaction, result, header);
-    const bankrupt  = isBankrupt(player) ? player : null;
-    return advanceTurn(interaction, game, bankrupt);
-  }
-
-  // EVENT
-  if (tile.type === TILE_TYPES.EVENT) {
-    const card = drawEvent(player);
-    const sign = card.delta >= 0 ? "💚" : "🔴";
-    await editTurnMessage(interaction, game, {
-      content:
-        `${header}\n\n` +
-        `${card.emoji} **${card.title}**\n` +
-        `_${card.description}_\n` +
-        `${sign} **${fmtDelta(card.delta)} rep**  •  Balance: ${player.reputation}`,
+  if (tile.type === TILE_TYPES.FREE_PARKING) {
+    await game.turnMessage.edit({
+      content:    `${header}\n🅿️ Free Parking! Kick back and relax — nothing happens.`,
       components: [],
     });
-    const bankrupt = isBankrupt(player) ? player : null;
-    return advanceTurn(interaction, game, bankrupt);
+    return advanceTurn(interaction, game);
   }
 
-  // PROPERTY
+  if (tile.type === TILE_TYPES.SLOT) {
+    const result   = spinSlot(player);
+    result.balance = player.reputation;
+    await animateSlot(game, result, header);
+    return advanceTurn(interaction, game, isBankrupt(player) ? player : null);
+  }
+
+  if (tile.type === TILE_TYPES.EVENT) {
+    return runEventFlow(interaction, game, player, header);
+  }
+
   if (tile.type === TILE_TYPES.PROPERTY) {
     const ownerId = game.properties[player.position];
 
-    // Unowned — offer buy/skip
     if (!ownerId) {
-      await editTurnMessage(interaction, game, {
+      await game.turnMessage.edit({
         content:
           `${header}\n` +
           `💰 **For sale:** ${tile.price} rep  |  Rent: ${tile.rent} rep\n` +
           `💼 Your balance: ${player.reputation}`,
         components: getPropertyButtons(player.position),
       });
-      return; // wait for buy/skip button
+      return;
     }
 
-    // Own property
     if (ownerId === player.id) {
-      await editTurnMessage(interaction, game, {
+      await game.turnMessage.edit({
         content:    `${header}\n🏠 You own **${tile.name}**. Nothing to pay.`,
         components: [],
       });
       return advanceTurn(interaction, game);
     }
 
-    // Someone else's — pay rent
     const owner = game.players.find(p => p.id === ownerId);
     player.reputation -= tile.rent;
     owner.reputation  += tile.rent;
 
-    await editTurnMessage(interaction, game, {
+    await game.turnMessage.edit({
       content:
         `${header}\n` +
         `💸 Paid **${tile.rent} rep** rent to <@${owner.id}>\n` +
@@ -176,11 +140,10 @@ export async function handleRoll(interaction) {
       components: [],
     });
 
-    const bankrupt = isBankrupt(player) ? player : null;
-    return advanceTurn(interaction, game, bankrupt);
+    return advanceTurn(interaction, game, isBankrupt(player) ? player : null);
   }
 
   // Fallback
-  await editTurnMessage(interaction, game, { content: header, components: [] });
+  await game.turnMessage.edit({ content: header, components: [] });
   return advanceTurn(interaction, game);
 }

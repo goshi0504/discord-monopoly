@@ -26,15 +26,7 @@ const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
 const commands = [
   {
     name:        'play',
-    description: 'Create a new Inferno game in this server.',
-  },
-  {
-    name:        'join',
-    description: 'Join the current Inferno game.',
-  },
-  {
-    name:        'start',
-    description: 'Start the game (requires at least 2 players).',
+    description: 'Create a new Inferno game and open the lobby.',
   },
   {
     name:        'status',
