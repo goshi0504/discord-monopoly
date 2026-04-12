@@ -180,7 +180,7 @@ discord-monopoly/
 | A Discord account | — |
  
 ---
- 
+ Clone the GitHub reposistory in a project folder.
 ### Step 1 — Create a Discord Bot Application
  
 1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
@@ -238,6 +238,9 @@ GUILD_ID=your_server_id_here
  
 ```bash
 npm install
+npm install canvas
+npm install @napi-rs/canvas gif-encoder-2
+
 ```
  
 ---
