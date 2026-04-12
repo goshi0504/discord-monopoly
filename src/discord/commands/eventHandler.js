@@ -29,8 +29,8 @@ function buildVotePrompt(card, activePlayer, sideDelta, secondsLeft, votes, allP
     `🃏 **Event card drawn for <@${activePlayer.id}>!**\n` +
     `_The details are hidden until voting ends…_\n\n` +
     `⏱️ **${secondsLeft}s** to vote\n` +
-    `🤝 Support → **${fmtDelta(sideDelta)} rep**  |  ` +
-    `🗡️ Oppose → **${fmtDelta(-sideDelta)} rep**  |  ` +
+    `🤝 Win the bet → **${fmtDelta(sideDelta)} rep**  |  ` +
+    `🗡️ Lose the bet → **${fmtDelta(-sideDelta)} rep**  |  ` +
     `🚫 Skip → no change\n\n` +
     (voterLines ? `Votes: ${voterLines}` : "")
   );

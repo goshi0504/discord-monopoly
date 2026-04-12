@@ -4,5 +4,6 @@ export const TILE_TYPES = {
   EVENT: "event",
   JAIL: "jail",
   GO_TO_JAIL: "go_to_jail",
-  START: "start"
+  START: "start",
+  FREE_PARKING: "free_parking",
 };

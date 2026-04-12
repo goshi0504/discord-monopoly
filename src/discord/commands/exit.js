@@ -1,18 +1,23 @@
-import { getGame, deleteGame, getRichestPlayer } from '../../engine/gameManager.js';
+import { getGame, deleteGame } from '../../engine/gameManager.js';
+import { buildLeaderboard }    from '../../systems/leaderboard.js';
 
 export async function handleExit(interaction) {
   const game = getGame(interaction.guildId);
 
   if (!game) {
-    return interaction.reply({ content: "❌ No game running.", ephemeral: true });
+    return interaction.reply({ content: '❌ No game running.', ephemeral: true });
   }
 
-  const winner = game.started ? getRichestPlayer(game) : null;
+  await interaction.reply({ content: '🛑 Ending game…', ephemeral: true });
+
+  const reason = `🛑 Game ended early by <@${interaction.user.id}>.`;
+
+  if (game.started && game.players.length > 0) {
+    const content = buildLeaderboard(game.players, game.properties, reason);
+    await interaction.channel.send({ content, components: [] });
+  } else {
+    await interaction.channel.send({ content: reason, components: [] });
+  }
+
   deleteGame(interaction.guildId);
-
-  const ending = winner
-    ? `🏆 <@${winner.id}> ends the game with the most reputation (${winner.reputation})!`
-    : "Game disbanded before it started.";
-
-  return interaction.reply({ content: `🛑 Game ended.\n${ending}` });
 }

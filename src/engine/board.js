@@ -24,7 +24,7 @@ export const board = [
   { type: TILE_TYPES.PROPERTY,   name: "The Venetian",      price: 280, rent: 30 },
   { type: TILE_TYPES.EVENT,      name: "Event" },
   { type: TILE_TYPES.PROPERTY,   name: "Wynn",              price: 300, rent: 32 },
-  { type: TILE_TYPES.PROPERTY,   name: "Free Parking",      price: 0, rent:0 },
+  { type: TILE_TYPES.FREE_PARKING,   name: "Free Parking"},
   // 🔺 Top row (left → right)
   { type: TILE_TYPES.PROPERTY,   name: "Encore",            price: 320, rent: 34 },
   { type: TILE_TYPES.PROPERTY,   name: "Circus Circus",     price: 340, rent: 36 },
