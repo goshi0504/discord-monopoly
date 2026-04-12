@@ -38,7 +38,7 @@ export function buildLeaderboard(players, properties, reason = 'The game has end
   });
 
   return [
-    `## 🔥 INFERNO — FINAL STANDINGS`,
+    `## 🔥 INFERNO — FINAL STANDINGS(REPUTATION-O-METER)`,
     `_${reason}_`,
     ``,
     rows.join('\n\n'),
