@@ -1,15 +1,15 @@
 /**
  * boardRenderer.js
  *
- * Install:
- *   npm install @napi-rs/canvas gif-encoder-2
+ * Install:  npm install @napi-rs/canvas
  *
- * gif-encoder-2 is a pure-JS GIF encoder with no native dependencies.
- * @napi-rs/canvas ships prebuilt binaries — no compilation needed.
+ * Key fixes vs previous version:
+ *   1. Board image is loaded ONCE at startup and cached — no per-render disk I/O
+ *   2. canvas.encode('png') used instead of canvas.toBuffer() — async, non-blocking
+ *   3. GIF rendering removed (was causing hangs) — static PNG only for now
  */
 
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import GIFEncoder                  from 'gif-encoder-2';
 import { fileURLToPath }           from 'url';
 import path                        from 'path';
 
@@ -22,6 +22,15 @@ const BOARD_H = 940;
 const CORNER  = 130;
 const REG_W   = (BOARD_W - 2 * CORNER) / 9;
 const REG_H   = (BOARD_H - 2 * CORNER) / 9;
+
+// ── Cached board image — loaded once, reused forever ─────────────────────────
+let _boardImg = null;
+async function getBoardImage() {
+  if (!_boardImg) {
+    _boardImg = await loadImage(BOARD_PATH);
+  }
+  return _boardImg;
+}
 
 // ── Tile centers ─────────────────────────────────────────────────────────────
 function buildTileCenters() {
@@ -45,10 +54,10 @@ const TILE_CENTERS = buildTileCenters();
 // ── Ownership bar geometry ───────────────────────────────────────────────────
 const BAR_THICK = 8;
 const BAR_COVER = 0.80;
-const CORNERS   = new Set([0, 10, 20, 30]);
+const CORNER_TILES = new Set([0, 10, 20, 30]);
 
 function ownershipBarRect(tileIdx) {
-  if (CORNERS.has(tileIdx)) return null;
+  if (CORNER_TILES.has(tileIdx)) return null;
   const [cx, cy] = TILE_CENTERS[tileIdx];
   if (tileIdx >= 1  && tileIdx <= 9)  { const w = REG_W * BAR_COVER; return { x: cx - w/2, y: BOARD_H - BAR_THICK, w, h: BAR_THICK }; }
   if (tileIdx >= 11 && tileIdx <= 19) { const h = REG_H * BAR_COVER; return { x: 0, y: cy - h/2, w: BAR_THICK, h }; }
@@ -60,7 +69,7 @@ function ownershipBarRect(tileIdx) {
 // ── Player colours ───────────────────────────────────────────────────────────
 export const PLAYER_COLOURS = ['#FF4444', '#44AAFF', '#44FF88', '#FFD700', '#FF44FF'];
 
-// ── Token layout ─────────────────────────────────────────────────────────────
+// ── Token layout offsets ─────────────────────────────────────────────────────
 const TOKEN_R = 12;
 const OFFSETS = [
   [[0, 0]],
@@ -70,11 +79,12 @@ const OFFSETS = [
   [[-13, -10], [13, -10], [-13, 10], [13, 10], [0, 0]],
 ];
 
-// ── Draw a full board frame onto ctx ─────────────────────────────────────────
-function drawFrame(ctx, boardImg, players, properties, playerIdToIdx, highlightPos = null) {
+// ── Core draw ────────────────────────────────────────────────────────────────
+function drawBoard(ctx, boardImg, players, properties, playerIdToIdx) {
+  // Base board image
   ctx.drawImage(boardImg, 0, 0, BOARD_W, BOARD_H);
 
-  // Ownership bars
+  // Ownership colour bars on outer tile edges
   for (const [key, ownerId] of Object.entries(properties)) {
     const rect = ownershipBarRect(parseInt(key, 10));
     if (!rect) continue;
@@ -84,16 +94,7 @@ function drawFrame(ctx, boardImg, players, properties, playerIdToIdx, highlightP
     ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
   }
 
-  // Highlight glow on current tile
-  if (highlightPos !== null) {
-    const [cx, cy] = TILE_CENTERS[highlightPos];
-    ctx.beginPath();
-    ctx.arc(cx, cy, TOKEN_R + 8, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,200,0.4)';
-    ctx.fill();
-  }
-
-  // Tokens grouped by tile
+  // Player tokens
   const byTile = new Map();
   players.forEach((p, idx) => {
     if (!byTile.has(p.position)) byTile.set(p.position, []);
@@ -101,100 +102,71 @@ function drawFrame(ctx, boardImg, players, properties, playerIdToIdx, highlightP
   });
 
   for (const [tileIdx, idxList] of byTile) {
-    const [cx, cy] = TILE_CENTERS[tileIdx] ?? [BOARD_W / 2, BOARD_H / 2];
+    const center  = TILE_CENTERS[tileIdx];
+    if (!center) continue;                          // guard against invalid position
+    const [cx, cy] = center;
     const offsets  = OFFSETS[Math.min(idxList.length, 5) - 1];
+
     idxList.forEach((pIdx, slot) => {
       const [ox, oy] = offsets[slot] ?? [0, 0];
-      const tx = cx + ox, ty = cy + oy;
+      const tx = cx + ox;
+      const ty = cy + oy;
       const col = PLAYER_COLOURS[pIdx % PLAYER_COLOURS.length];
 
-      ctx.shadowColor = 'rgba(0,0,0,0.7)';
-      ctx.shadowBlur = 6; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
-      ctx.beginPath(); ctx.arc(tx, ty, TOKEN_R, 0, Math.PI * 2);
-      ctx.fillStyle = col; ctx.fill();
+      // Drop shadow
+      ctx.shadowColor   = 'rgba(0,0,0,0.7)';
+      ctx.shadowBlur    = 6;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
 
+      // Token circle
+      ctx.beginPath();
+      ctx.arc(tx, ty, TOKEN_R, 0, Math.PI * 2);
+      ctx.fillStyle = col;
+      ctx.fill();
+
+      // White border
       ctx.shadowColor = 'transparent';
-      ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth   = 2;
+      ctx.stroke();
 
-      ctx.font = 'bold 11px Arial'; ctx.fillStyle = 'white';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
+      // Number label
+      ctx.font         = 'bold 11px Arial';
+      ctx.fillStyle    = 'white';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur   = 3;
       ctx.fillText(String(pIdx + 1), tx, ty);
-      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+      // Reset shadow
+      ctx.shadowColor  = 'transparent';
+      ctx.shadowBlur   = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
     });
   }
 }
 
-// ── Step path (handles wrap-around) ──────────────────────────────────────────
-function buildPath(from, to, boardLength) {
-  const steps = [];
-  let pos = from;
-  while (pos !== to) { pos = (pos + 1) % boardLength; steps.push(pos); }
-  return steps;
-}
+// ── Public API ────────────────────────────────────────────────────────────────
 
-// ── Collect GIF encoder output into a Buffer ─────────────────────────────────
-function encoderToBuffer(encoder) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    encoder.on('data',  c => chunks.push(c));
-    encoder.on('end',   () => resolve(Buffer.concat(chunks)));
-    encoder.on('error', reject);
-  });
-}
-
-// ── Public: static PNG ───────────────────────────────────────────────────────
+/**
+ * Render the current board state as a PNG buffer.
+ * Uses cached board image and async encode to avoid blocking the event loop.
+ *
+ * @param {object[]} players     - array of { id, position }
+ * @param {object}   properties  - { [tileIndex]: playerId }
+ * @returns {Promise<Buffer>}
+ */
 export async function renderBoard(players, properties = {}) {
-  const boardImg      = await loadImage(BOARD_PATH);
+  const boardImg      = await getBoardImage();
   const canvas        = createCanvas(BOARD_W, BOARD_H);
   const ctx           = canvas.getContext('2d');
   const playerIdToIdx = new Map(players.map((p, i) => [p.id, i]));
-  drawFrame(ctx, boardImg, players, properties, playerIdToIdx);
-  return canvas.toBuffer('image/png');
-}
 
-// ── Public: animated GIF ─────────────────────────────────────────────────────
-export async function renderMoveGif(
-  players, properties = {},
-  movingPlayerIdx, fromPos, toPos,
-  boardLength = 40,
-) {
-  const boardImg      = await loadImage(BOARD_PATH);
-  const canvas        = createCanvas(BOARD_W, BOARD_H);
-  const ctx           = canvas.getContext('2d');
-  const playerIdToIdx = new Map(players.map((p, i) => [p.id, i]));
-  const snapshots     = players.map(p => ({ ...p }));
-  const steps         = buildPath(fromPos, toPos, boardLength);
+  drawBoard(ctx, boardImg, players, properties, playerIdToIdx);
 
-  // gif-encoder-2 setup
-  const encoder = new GIFEncoder(BOARD_W, BOARD_H, 'neuquant', true);
-  encoder.setRepeat(0);    // 0 = play once, -1 = loop forever
-  encoder.setQuality(20);  // 1–30, higher = faster encode / lower quality
-  encoder.setDelay(130);
-  encoder.start();
-
-  const bufPromise = encoderToBuffer(encoder);
-
-  // Frame 0 — start tile (300ms)
-  encoder.setDelay(300);
-  snapshots[movingPlayerIdx].position = fromPos;
-  drawFrame(ctx, boardImg, snapshots, properties, playerIdToIdx, fromPos);
-  encoder.addFrame(ctx.canvas);
-
-  // Intermediate hops — 130ms each
-  encoder.setDelay(130);
-  for (const stepPos of steps.slice(0, -1)) {
-    snapshots[movingPlayerIdx].position = stepPos;
-    drawFrame(ctx, boardImg, snapshots, properties, playerIdToIdx, stepPos);
-    encoder.addFrame(ctx.canvas);
-  }
-
-  // Final frame — long freeze so player can read the tile (1800ms)
-  encoder.setDelay(1800);
-  snapshots[movingPlayerIdx].position = toPos;
-  drawFrame(ctx, boardImg, snapshots, properties, playerIdToIdx, toPos);
-  encoder.addFrame(ctx.canvas);
-
-  encoder.finish();
-  return bufPromise;
+  // encode() is async and non-blocking — toBuffer() is sync and blocks the event loop
+  return canvas.encode('png');
 }
