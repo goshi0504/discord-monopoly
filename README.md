@@ -73,7 +73,7 @@ Each player starts with **$1,500**.
  
 ###  Jail
 - **Go To Jail** tile teleports you to Jail immediately
-- **Landing on Jail** (visiting) costs a **$200 fine** — you are not locked in
+- **Landing on Jail** (visiting) — you are not locked in
 - If you are in Jail on your turn, you can:
   - Pay **$150 bail** to escape and roll normally
   - Roll dice — if you get doubles you escape for free and move that many spaces
