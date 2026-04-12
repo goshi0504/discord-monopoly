@@ -33,7 +33,7 @@
 4. Players take turns clicking ** Roll Dice**
 5. The bot moves the player's token and resolves the tile they land on
 6. The game ends when any player completes **4 laps**, or a player goes bankrupt
-7. The **SIN-O-METER** leaderboard is displayed — most broke player at the top, richest at the bottom
+7. The leaderboard is displayed — richest player at the top, poorest at the bottom
  
 ---
  
