@@ -2,7 +2,7 @@ import { games } from '../state/gameStore.js';
 
 const MAX_PLAYERS = 5;
 const STARTING_REP = 1500;
-const GO_BONUS = 200; // collected when passing or landing on GO
+const GO_BONUS = 50; // collected when passing or landing on GO
 
 export function createGame(guildId) {
   games[guildId] = {

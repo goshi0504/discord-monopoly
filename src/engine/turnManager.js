@@ -1,33 +1,56 @@
-import { getRollButton }              from '../discord/components/turnButtons.js';
+import { AttachmentBuilder }           from 'discord.js';
+import { getRollButton }               from '../discord/components/turnButtons.js';
 import { getRichestPlayer, deleteGame } from './gameManager.js';
+import { renderBoard }                  from '../systems/boardRenderer.js';
+
+/**
+ * Render the board as a Discord attachment.
+ * Returns null (and logs) if rendering fails so the game never crashes.
+ */
+async function makeBoardAttachment(players) {
+  try {
+    const buf = await renderBoard(players);
+    return new AttachmentBuilder(buf, { name: 'board.png' });
+  } catch (err) {
+    console.error('[boardRenderer] failed to render board:', err.message);
+    return null;
+  }
+}
 
 /**
  * Advance to the next player.
- * Posts a NEW turn message with the Roll button tagged to the next player.
- * Stores the message on game.turnMessage so roll.js can edit it in place.
- *
- * If `bankruptPlayer` is provided the game ends immediately.
+ * Posts a new turn message via channel.send() — never touches an interaction token.
+ * Attaches a fresh board render showing all player positions.
  */
 export async function advanceTurn(interaction, game, bankruptPlayer = null) {
+  const channel = game.turnMessage?.channel;
+
   if (bankruptPlayer) {
     const winner  = getRichestPlayer(game);
     deleteGame(interaction.guildId);
-    return interaction.followUp({
-      content:
-        `💀 <@${bankruptPlayer.id}> has gone **bankrupt** — game over!\n` +
-        `🏆 <@${winner.id}> wins with **${winner.reputation}** reputation!`,
-      components: [],
-    });
+    const content =
+      `💀 <@${bankruptPlayer.id}> has gone **bankrupt** — game over!\n` +
+      `🏆 <@${winner.id}> wins with **${winner.reputation}** reputation!`;
+
+    const file = await makeBoardAttachment(game.players);
+    const payload = { content, components: [], files: file ? [file] : [] };
+    if (channel) return channel.send(payload);
+    return interaction.followUp(payload);
   }
 
   game.currentTurn = (game.currentTurn + 1) % game.players.length;
   const next = game.players[game.currentTurn];
 
-  // Post the persistent turn message and store a reference for roll.js to edit
-  const msg = await interaction.followUp({
+  if (!channel) {
+    console.error('[advanceTurn] game.turnMessage.channel is missing.');
+    return;
+  }
+
+  const file = await makeBoardAttachment(game.players);
+  const msg  = await channel.send({
     content:    `🎰 <@${next.id}>'s turn — press Roll when ready!`,
     components: getRollButton(next.id),
-    fetchReply: true,
+    files:      file ? [file] : [],
   });
 
   game.turnMessage = msg;

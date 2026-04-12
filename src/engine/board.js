@@ -24,9 +24,8 @@ export const board = [
   { type: TILE_TYPES.PROPERTY,   name: "The Venetian",      price: 280, rent: 30 },
   { type: TILE_TYPES.EVENT,      name: "Event" },
   { type: TILE_TYPES.PROPERTY,   name: "Wynn",              price: 300, rent: 32 },
-
+  { type: TILE_TYPES.PROPERTY,   name: "Free Parking",      price: 0, rent:0 },
   // 🔺 Top row (left → right)
-  { type: TILE_TYPES.GO_TO_JAIL, name: "Go To Jail" },
   { type: TILE_TYPES.PROPERTY,   name: "Encore",            price: 320, rent: 34 },
   { type: TILE_TYPES.PROPERTY,   name: "Circus Circus",     price: 340, rent: 36 },
   { type: TILE_TYPES.EVENT,      name: "Event" },
@@ -34,6 +33,9 @@ export const board = [
   { type: TILE_TYPES.SLOT,       name: "Slot Machine" },
   { type: TILE_TYPES.PROPERTY,   name: "Fremont Street",    price: 380, rent: 40 },
   { type: TILE_TYPES.PROPERTY,   name: "Golden Nugget",     price: 400, rent: 42 },
+  { type: TILE_TYPES.PROPERTY,   name: "Vegas Chapel",     price: 300, rent: 32 },
+  { type: TILE_TYPES.PROPERTY,   name: "Fenchurch St. Station",     price: 390, rent: 40 },
+  { type: TILE_TYPES.GO_TO_JAIL, name: "Go To Jail" },,
 
   // 🔻 Right column (top → bottom)
   { type: TILE_TYPES.EVENT,      name: "Event" },
@@ -42,6 +44,9 @@ export const board = [
   { type: TILE_TYPES.SLOT,       name: "Slot Machine" },
   { type: TILE_TYPES.PROPERTY,   name: "Las Vegas Sign",    price: 460, rent: 48 },
   { type: TILE_TYPES.PROPERTY,   name: "MGM Grand",         price: 480, rent: 50 },
+  { type: TILE_TYPES.PROPERTY,   name: "The Hilton",        price: 440, rent: 49 },
+  { type: TILE_TYPES.EVENT,      name: "Event" },
+  { type: TILE_TYPES.PROPERTY,   name: "Hotel Excalibur",   price: 500, rent:50}
 ];
 
 /** Index of the Jail tile — used for Go To Jail teleport */
