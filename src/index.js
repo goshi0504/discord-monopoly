@@ -1,4 +1,4 @@
-const http = require('http');
+import http from 'http';
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' || req.method === 'HEAD') {
@@ -16,7 +16,7 @@ server.listen(PORT, () => {
   console.log(`Keep-alive server running on port ${PORT}`);
 });
 
-// --- ДООШ ҮНДСЭН КОД ҮРГЭЛЖИЛНЭ ---
+// --- ЧИНИЙ ҮНДСЭН КОД ЭНДЭЭС ДООШ ҮРГЭЛЖИЛНЭ ---
 import { Client, GatewayIntentBits } from 'discord.js';
 import 'dotenv/config';
 import { handleInteraction } from './discord/interactionHandler.js';
